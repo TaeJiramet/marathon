@@ -1,46 +1,76 @@
 <?php
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
+
+// ปิด error output (InfinityFree แพ้มาก)
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 include 'db.php';
 
-$data = json_decode(file_get_contents('php://input'), true);
+// อ่าน JSON จาก fetch
+$raw = file_get_contents('php://input');
+$data = json_decode($raw, true);
 
-if (!$data) {
-    echo json_encode(['status' => 'error', 'message' => 'No data received']);
+// ถ้าไม่ได้ JSON → จบ
+if (!is_array($data)) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Invalid JSON data'
+    ]);
     exit;
 }
 
-// บันทึก runner
-$first_name = $conn->real_escape_string($data['firstName']);
-$last_name = $conn->real_escape_string($data['lastName']);
-$dob = $conn->real_escape_string($data['dob']);
-$gender = $conn->real_escape_string($data['gender']);
-$phone = $conn->real_escape_string($data['phone']);
-$email = $conn->real_escape_string($data['email']);
-$address = $conn->real_escape_string($data['address']);
-$is_disabled = $data['isDisabled'] ? 1 : 0;
+// ป้องกัน undefined index
+$first_name  = $conn->real_escape_string($data['firstName'] ?? '');
+$last_name   = $conn->real_escape_string($data['lastName'] ?? '');
+$dob         = $conn->real_escape_string($data['dob'] ?? '');
+$gender      = $conn->real_escape_string($data['gender'] ?? '');
+$phone       = $conn->real_escape_string($data['phone'] ?? '');
+$email       = $conn->real_escape_string($data['email'] ?? '');
+$address     = $conn->real_escape_string($data['address'] ?? '');
+$is_disabled = !empty($data['isDisabled']) ? 1 : 0;
 
-$sql_runner = "INSERT INTO runner (first_name,last_name,date_of_birth,gender,phone,email,address,is_disabled)
-VALUES ('$first_name','$last_name','$dob','$gender','$phone','$email','$address','$is_disabled')";
+// insert runner
+$sql_runner = "
+INSERT INTO runner
+(first_name,last_name,date_of_birth,gender,phone,email,address,is_disabled)
+VALUES
+('$first_name','$last_name','$dob','$gender','$phone','$email','$address',$is_disabled)
+";
 
-if ($conn->query($sql_runner) === TRUE) {
-    $runner_id = $conn->insert_id;
+if (!$conn->query($sql_runner)) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => $conn->error
+    ]);
+    exit;
+}
 
-    $category_id = intval($data['raceCategory']);
-    $age_group = $conn->real_escape_string($data['ageGroup']);
-    $shirt_size = $conn->real_escape_string($data['shirtSize']);
-    $shipping_option = intval($data['shippingOption']);
+$runner_id = $conn->insert_id;
 
-    $sql_reg = "INSERT INTO registration (runner_id,race_category,age_group,shirt_size,shipping_option)
-                VALUES ($runner_id,$category_id,'$age_group','$shirt_size',$shipping_option)";
+// registration
+$category_id = intval($data['raceCategory']);
+$age_group   = $conn->real_escape_string($data['ageGroup']);
+$shirt_size  = $conn->real_escape_string($data['shirtSize']);
+$shipping    = intval($data['shippingOption']);
 
-    if ($conn->query($sql_reg) === TRUE) {
-        echo json_encode(['status' => 'success', 'message' => 'สมัครแข่งขันสำเร็จ']);
-    } else {
-        echo json_encode(['status' => 'error', 'message' => $conn->error]);
-    }
+$sql_reg = "
+INSERT INTO registration
+(runner_id,race_category,age_group,shirt_size,shipping_option)
+VALUES
+($runner_id,$category_id,'$age_group','$shirt_size',$shipping)
+";
+
+if ($conn->query($sql_reg)) {
+    echo json_encode([
+        'status' => 'success',
+        'message' => 'สมัครแข่งขันสำเร็จ'
+    ]);
 } else {
-    echo json_encode(['status' => 'error', 'message' => $conn->error]);
+    echo json_encode([
+        'status' => 'error',
+        'message' => $conn->error
+    ]);
 }
 
 $conn->close();
-?>
